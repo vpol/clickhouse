@@ -1,6 +1,6 @@
 module github.com/vpol/clickhouse
 
-go 1.14
+go 1.16
 
 require (
 	github.com/ClickHouse/clickhouse-go v1.5.1

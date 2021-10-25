@@ -47,11 +47,11 @@ func New(config Config) gorm.Dialector {
 	return &Dialector{Config: &config}
 }
 
-func (dialector Dialector) Name() string {
+func (d Dialector) Name() string {
 	return "clickhouse"
 }
 
-func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
+func (d Dialector) Initialize(db *gorm.DB) (err error) {
 	// register callbacks
 	ctx := context.Background()
 	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{
@@ -60,57 +60,57 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 	db.Callback().Create().Replace("gorm:create", Create)
 
 	// assign option fields to default values
-	if dialector.DriverName == "" {
-		dialector.DriverName = "clickhouse"
+	if d.DriverName == "" {
+		d.DriverName = "clickhouse"
 	}
 
 	// default settings
-	if dialector.Config.DefaultGranularity == 0 {
-		dialector.Config.DefaultGranularity = 3
+	if d.Config.DefaultGranularity == 0 {
+		d.Config.DefaultGranularity = 3
 	}
 
-	if dialector.Config.DefaultCompression == "" {
-		dialector.Config.DefaultCompression = "LZ4"
+	if d.Config.DefaultCompression == "" {
+		d.Config.DefaultCompression = "LZ4"
 	}
 
-	if dialector.DefaultIndexType == "" {
-		dialector.DefaultIndexType = "minmax"
+	if d.DefaultIndexType == "" {
+		d.DefaultIndexType = "minmax"
 	}
 
-	if dialector.DefaultTableEngineOpts == "" {
-		dialector.DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
+	if d.DefaultTableEngineOpts == "" {
+		d.DefaultTableEngineOpts = "ENGINE=MergeTree() ORDER BY tuple()"
 	}
 
-	if dialector.Conn != nil {
-		db.ConnPool = dialector.Conn
+	if d.Conn != nil {
+		db.ConnPool = d.Conn
 	} else {
 		var dbb *sql.DB
 
-		dbb, err = sql.Open(dialector.DriverName, dialector.DSN)
+		dbb, err = sql.Open(d.DriverName, d.DSN)
 		if err != nil {
 			return err
 		}
 
-		if dialector.PoolMaxIdleTime > 0 {
-			dbb.SetConnMaxIdleTime(dialector.PoolMaxIdleTime)
+		if d.PoolMaxIdleTime > 0 {
+			dbb.SetConnMaxIdleTime(d.PoolMaxIdleTime)
 		}
 
-		if dialector.PoolMaxLifetime > 0 {
-			dbb.SetConnMaxLifetime(dialector.PoolMaxLifetime)
+		if d.PoolMaxLifetime > 0 {
+			dbb.SetConnMaxLifetime(d.PoolMaxLifetime)
 		}
 
-		if dialector.PoolMaxIdleCount > 0 {
-			dbb.SetMaxIdleConns(dialector.PoolMaxIdleCount)
+		if d.PoolMaxIdleCount > 0 {
+			dbb.SetMaxIdleConns(d.PoolMaxIdleCount)
 		}
 
-		if dialector.PoolMaxOpenCount > 0 {
-			dbb.SetMaxOpenConns(dialector.PoolMaxOpenCount)
+		if d.PoolMaxOpenCount > 0 {
+			dbb.SetMaxOpenConns(d.PoolMaxOpenCount)
 		}
 
 		db.ConnPool = dbb
 	}
 
-	if !dialector.SkipInitializeWithVersion {
+	if !d.SkipInitializeWithVersion {
 		var vs string
 		err = db.ConnPool.QueryRowContext(ctx, "SELECT version()").Scan(&vs)
 		if err != nil {
@@ -120,11 +120,11 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		versionNoRenameColumn, _ := version.NewConstraint("< 20.4")
 
 		if versionNoRenameColumn.Check(dbversion) {
-			dialector.Config.DontSupportRenameColumn = true
+			d.Config.DontSupportRenameColumn = true
 		}
 	}
 
-	for k, v := range dialector.ClauseBuilders() {
+	for k, v := range d.ClauseBuilders() {
 		db.ClauseBuilders[k] = v
 	}
 	return
@@ -164,7 +164,7 @@ func modifyExprs(exprs []clause.Expression) {
 	}
 }
 
-func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
+func (d Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	clauseBuilders := map[string]clause.ClauseBuilder{
 		"DELETE": func(c clause.Clause, builder clause.Builder) {
 			builder.WriteString("ALTER TABLE ")
@@ -211,19 +211,19 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	return clauseBuilders
 }
 
-func (dialector Dialector) Migrator(db *gorm.DB) gorm.Migrator {
+func (d Dialector) Migrator(db *gorm.DB) gorm.Migrator {
 	return Migrator{
 		Migrator: migrator.Migrator{
 			Config: migrator.Config{
 				DB:        db,
-				Dialector: dialector,
+				Dialector: d,
 			},
 		},
-		Dialector: dialector,
+		Dialector: d,
 	}
 }
 
-func (dialector Dialector) DataTypeOf(field *schema.Field) string {
+func (d Dialector) DataTypeOf(field *schema.Field) string {
 	switch field.DataType {
 	case schema.Bool:
 		return "UInt8"
@@ -259,7 +259,7 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 	case schema.Time:
 		// TODO: support TimeZone
 		precision := ""
-		if !dialector.DisableDatetimePrecision {
+		if !d.DisableDatetimePrecision {
 			if field.Precision == 0 {
 				field.Precision = 3
 			}
@@ -273,15 +273,15 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 	return string(field.DataType)
 }
 
-func (dialector Dialector) DefaultValueOf(field *schema.Field) clause.Expression {
+func (d Dialector) DefaultValueOf(field *schema.Field) clause.Expression {
 	return clause.Expr{SQL: "DEFAULT"}
 }
 
-func (dialector Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v interface{}) {
+func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v interface{}) {
 	writer.WriteByte('?')
 }
 
-func (dialector Dialector) QuoteTo(writer clause.Writer, str string) {
+func (d Dialector) QuoteTo(writer clause.Writer, str string) {
 	writer.WriteByte('`')
 	if strings.Contains(str, ".") {
 		for idx, str := range strings.Split(str, ".") {
@@ -297,14 +297,14 @@ func (dialector Dialector) QuoteTo(writer clause.Writer, str string) {
 	}
 }
 
-func (dialector Dialector) Explain(sql string, vars ...interface{}) string {
+func (d Dialector) Explain(sql string, vars ...interface{}) string {
 	return logger.ExplainSQL(sql, nil, `'`, vars...)
 }
 
-func (dialectopr Dialector) SavePoint(tx *gorm.DB, name string) error {
+func (d Dialector) SavePoint(tx *gorm.DB, name string) error {
 	return gorm.ErrUnsupportedDriver
 }
 
-func (dialectopr Dialector) RollbackTo(tx *gorm.DB, name string) error {
+func (d Dialector) RollbackTo(tx *gorm.DB, name string) error {
 	return gorm.ErrUnsupportedDriver
 }

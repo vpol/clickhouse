@@ -5,7 +5,7 @@ import (
 	"time"
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
-	"gorm.io/driver/clickhouse"
+	"github.com/vpol/clickhouse"
 	"gorm.io/gorm"
 )
 

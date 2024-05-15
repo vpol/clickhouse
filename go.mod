@@ -1,4 +1,4 @@
-module gorm.io/driver/clickhouse
+module github.com/vpol/clickhouse
 
 go 1.22
 

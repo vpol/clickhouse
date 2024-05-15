@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"gorm.io/driver/clickhouse"
+	"github.com/vpol/clickhouse"
 	"gorm.io/gorm"
 	"gorm.io/gorm/utils/tests"
 )

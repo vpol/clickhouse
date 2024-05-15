@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/hashicorp/go-version"
@@ -30,6 +31,10 @@ type Config struct {
 	DefaultCompression           string // default compression algorithm. LZ4 is lossless
 	DefaultIndexType             string // index stores extremes of the expression
 	DefaultTableEngineOpts       string
+	PoolMaxIdleCount             int           // zero means defaultMaxIdleConns; negative means 0
+	PoolMaxOpenCount             int           // <= 0 means unlimited
+	PoolMaxLifetime              time.Duration // maximum amount of time a connection may be reused
+	PoolMaxIdleTime              time.Duration // maximum amount of time a connection may be idle before being closed
 }
 
 type Dialector struct {
@@ -84,10 +89,27 @@ func (dialector *Dialector) Initialize(db *gorm.DB) (err error) {
 	if dialector.Conn != nil {
 		db.ConnPool = dialector.Conn
 	} else {
-		db.ConnPool, err = sql.Open(dialector.DriverName, dialector.DSN)
-		if err != nil {
-			return err
+		var dbb *sql.DB
+
+		dbb, err = sql.Open(dialector.DriverName, dialector.DSN)
+
+		if dialector.PoolMaxIdleTime > 0 {
+			dbb.SetConnMaxIdleTime(dialector.PoolMaxIdleTime)
 		}
+
+		if dialector.PoolMaxLifetime > 0 {
+			dbb.SetConnMaxLifetime(dialector.PoolMaxLifetime)
+		}
+
+		if dialector.PoolMaxIdleCount > 0 {
+			dbb.SetMaxIdleConns(dialector.PoolMaxIdleCount)
+		}
+
+		if dialector.PoolMaxOpenCount > 0 {
+			dbb.SetMaxOpenConns(dialector.PoolMaxOpenCount)
+		}
+
+		db.ConnPool = dbb
 	}
 
 	if dialector.DSN != "" {
